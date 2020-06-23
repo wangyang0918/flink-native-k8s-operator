@@ -15,6 +15,7 @@
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
 
         <version.fabric8.client>4.9.2</version.fabric8.client>
+        <lombok.version>1.18.10</lombok.version>
 
         <scala.version>2.11</scala.version>
         <flink.version>1.11-SNAPSHOT</flink.version>
@@ -35,6 +36,12 @@
             <artifactId>kubernetes-server-mock</artifactId>
             <version>${version.fabric8.client}</version>
             <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
         </dependency>
 
         <dependency>
@@ -115,39 +122,6 @@
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.eclipse.jkube</groupId>
-                <artifactId>kubernetes-maven-plugin</artifactId>
-                <version>1.0.0-alpha-4</version>
-                <configuration>
-                    <images>
-                        <image>
-                            <!-- Add your dockerhub user name here -->
-                            <name>wangyang09180523/flink-native-k8s-operator:${project.version}</name>
-                            <alias>podset-operator</alias>
-                            <build>
-                                <from>openjdk:8-jdk-slim-buster</from>
-                                <assembly>
-                                    <descriptorRef>artifact</descriptorRef>
-                                    <mode>dir</mode>
-                                    <inline>
-                                        <id>copy-jar-with-deps</id>
-                                        <files>
-                                            <file>
-                                                <source>
-                                                    ${project.build.directory}/${project.name}-${project.version}-jar-with-dependencies.jar
-                                                </source>
-                                                <outputDirectory>flink-native-k8s-operator</outputDirectory>
-                                            </file>
-                                        </files>
-                                    </inline>
-                                </assembly>
-                                <cmd>java -jar maven/flink-native-k8s-operator/${project.name}-${project.version}-jar-with-dependencies.jar</cmd>
-                            </build>
-                        </image>
-                    </images>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

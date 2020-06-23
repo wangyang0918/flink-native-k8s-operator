@@ -1,12 +1,14 @@
 package org.apache.flink.kubernetes.operator.crd;
 
-import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.fabric8.kubernetes.api.model.KubernetesResource;
+import lombok.ToString;
 
-@JsonDeserialize(
-        using = JsonDeserializer.None.class
-)
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonDeserialize()
+@ToString
+
 public class FlinkApplicationStatus implements KubernetesResource {
     private String state;
 
@@ -16,10 +18,5 @@ public class FlinkApplicationStatus implements KubernetesResource {
 
     public String getState() {
         return state;
-    }
-
-    @Override
-    public String toString() {
-        return "FlinkApplicationStatus{ state=" + state + "}";
     }
 }

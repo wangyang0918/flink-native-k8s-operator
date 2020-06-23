@@ -1,7 +1,17 @@
 apiVersion: flink.k8s.io/v1alpha1
 kind: FlinkApplication
 metadata:
-  name: flink-example-windowjoin
+  namespace: default
+  name: flink-example-statemachine
 spec:
   imageName: rmetzger/flink:1.11.0-rc2-c4132de4a50ab9b8f653c69af1ba15af44ff29a2
-  jarURI: local:///opt/flink/examples/streaming/WindowJoin.jar
+  jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
+  parallelism: 5
+  jobManagerResource:
+    mem: 4096m
+    cpu: 1.5
+  taskManagerResource:
+    mem: 2048m
+    cpu: 1
+  flinkConfig:
+    taskmanager.numberOfTaskSlots: 2

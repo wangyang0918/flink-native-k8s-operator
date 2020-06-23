@@ -1,7 +1,5 @@
 package org.apache.flink.kubernetes.operator;
 
-import io.fabric8.kubernetes.api.model.apiextensions.CustomResourceDefinition;
-import io.fabric8.kubernetes.api.model.apiextensions.CustomResourceDefinitionBuilder;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
@@ -29,20 +27,7 @@ public class KubernetesOperatorEntrypoint {
             }
 
             LOG.info("Using namespace : " + namespace);
-            CustomResourceDefinition crd = new CustomResourceDefinitionBuilder()
-                    .withNewMetadata().withName("flinkapplications.flink.k8s.io").endMetadata()
-                    .withNewSpec()
-                    .withGroup("flink.k8s.io")
-                    .withVersion("v1alpha1")
-                    .withNewNames()
-	                    .withKind("FlinkApplication")
-	                    .withPlural("flinkapplications")
-	                    .withSingular("flinkapplication")
-	                    .withShortNames("flinkapp")
-	                    .endNames()
-                    .withScope("Namespaced")
-                    .endSpec()
-                    .build();
+
             CustomResourceDefinitionContext crdContext = new CustomResourceDefinitionContext.Builder()
                     .withVersion("v1alpha1")
                     .withScope("Namespaced")
@@ -50,9 +35,9 @@ public class KubernetesOperatorEntrypoint {
                     .withPlural("flinkapplications")
                     .build();
 
-            SharedInformerFactory informerFactory = client.informers();
+            final SharedInformerFactory informerFactory = client.informers();
 
-            SharedIndexInformer<FlinkApplication> informer = informerFactory.sharedIndexInformerForCustomResource(
+            final SharedIndexInformer<FlinkApplication> informer = informerFactory.sharedIndexInformerForCustomResource(
             	crdContext,
 	            FlinkApplication.class,
 	            FlinkApplicationList.class,

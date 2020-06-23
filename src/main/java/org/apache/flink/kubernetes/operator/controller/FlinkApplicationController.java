@@ -11,18 +11,21 @@ import org.apache.flink.client.deployment.ClusterClientServiceLoader;
 import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
+import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkApplication;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkApplicationSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -30,6 +33,7 @@ import java.util.concurrent.BlockingQueue;
 public class FlinkApplicationController {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkApplicationController.class);
     private static final int RECONCILE_INTERVAL_MS = 3000;
+    private static final String KUBERNETES_APP_TARGET = "kubernetes-application";
 
     private BlockingQueue<String> workqueue;
     private SharedIndexInformer<FlinkApplication> flinkClusterInformer;
@@ -61,11 +65,12 @@ public class FlinkApplicationController {
             @Override
             public void onDelete(FlinkApplication flinkApplication, boolean b) {
                 final String clusterId = flinkApplication.getMetadata().getName();
-                LOG.info("{} is deleted, deleting flink resources", clusterId);
+                final String namespace = flinkApplication.getMetadata().getNamespace();
+                LOG.info("{} is deleted, destroying flink resources", clusterId);
                 kubernetesClient
                     .apps()
                     .deployments()
-                    .inNamespace("default")
+                    .inNamespace(namespace)
                     .withName(clusterId)
                     .cascading(true)
                     .delete();
@@ -81,20 +86,20 @@ public class FlinkApplicationController {
                 continue;
             }
             try {
-                LOG.info("Trying to get item from work queue...");
+                LOG.info("Trying to get item from work queue");
                 if (workqueue.isEmpty()) {
                     LOG.info("Work queue is empty");
                 }
                 String item = workqueue.take();
                 if (item.isEmpty() || (!item.contains("/"))) {
-                    LOG.warn("Ignoring invalid resource key: {}", item);
+                    LOG.warn("Ignoring invalid resource item: {}", item);
                 }
 
                 // Get the FlinkApplication resource's name from key which is in format namespace/name
                 String name = item.split("/")[1];
                 FlinkApplication flinkApplication = flinkClusterLister.get(item.split("/")[1]);
                 if (flinkApplication == null) {
-                    LOG.error("FlinkApplication {} in workqueue no longer exists", name);
+                    LOG.error("FlinkApplication {} in work queue no longer exists", name);
                     return;
                 }
                 LOG.info("Reconciling " + flinkApplication);
@@ -102,7 +107,7 @@ public class FlinkApplicationController {
 
                 Thread.sleep(RECONCILE_INTERVAL_MS);
             } catch (InterruptedException interruptedException) {
-                LOG.error("Controller interrupted..");
+                LOG.error("Controller interrupted");
             }
         }
     }
@@ -110,44 +115,88 @@ public class FlinkApplicationController {
     /**
      * Tries to achieve the desired state for flink cluster.
      *
-     * @param flinkApplication specified flink cluster
+     * @param flinkApp specified flink cluster
      */
-    private void reconcile(FlinkApplication flinkApplication) {
-        final String clusterId = flinkApplication.getMetadata().getName();
+    private void reconcile(FlinkApplication flinkApp) {
+        final String namespace = flinkApp.getMetadata().getNamespace();
+        final String clusterId = flinkApp.getMetadata().getName();
         final Deployment deployment = kubernetesClient.apps().deployments().withName(clusterId).get();
-        // Create new flink cluster
+        // Create new Flink application
         if (deployment == null) {
             final ClusterClientServiceLoader clusterClientServiceLoader = new DefaultClusterClientServiceLoader();
             final ApplicationDeployer deployer = new ApplicationClusterDeployer(clusterClientServiceLoader);
-            final URI uri;
+
+            final Configuration effectiveConfig;
             try {
-                uri = new URI(flinkApplication.getSpec().getJarURI());
-            } catch (URISyntaxException e) {
-                LOG.error("Error to parse jar uri {}", flinkApplication.getSpec().getJarURI(), e);
+                effectiveConfig = getEffectiveConfig(namespace, clusterId, flinkApp.getSpec());
+            } catch (Exception e) {
+                LOG.error("Failed to load configuration", e);
                 return;
             }
-            final Configuration effectiveConfig = new Configuration();
-            effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
-            effectiveConfig.set(DeploymentOptions.TARGET, "kubernetes-application");
-            effectiveConfig.set(PipelineOptions.JARS, Collections.singletonList(uri.toString()));
-            effectiveConfig.set(KubernetesConfigOptions.CONTAINER_IMAGE, flinkApplication.getSpec().getImageName());
-            // TODO move it to CRD and support dynamic config options
-            effectiveConfig.setString(JobManagerOptions.TOTAL_PROCESS_MEMORY.key(), "4096m");
-            effectiveConfig.setString(TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(), "2048m");
+
             final ApplicationConfiguration applicationConfiguration =
-                ApplicationConfiguration.fromConfiguration(effectiveConfig);
+                new ApplicationConfiguration(flinkApp.getSpec().getMainArgs(), flinkApp.getSpec().getEntryClass());
             try {
                 deployer.run(effectiveConfig, applicationConfiguration);
             } catch (Exception e) {
-                LOG.error("Failed to deploy cluster", e);
+                LOG.error("Failed to deploy cluster {}", clusterId, e);
             }
         } else {
             // TODO Update existing cluster
         }
     }
 
+    private Configuration getEffectiveConfig(String namespace, String clusterId, FlinkApplicationSpec spec) throws Exception {
+        final String flinkConfDir = System.getenv().get(ConfigConstants.ENV_FLINK_CONF_DIR);
+        final Configuration effectiveConfig;
+        if (flinkConfDir != null) {
+            effectiveConfig = GlobalConfiguration.loadConfiguration(flinkConfDir);
+        } else {
+            effectiveConfig = new Configuration();
+        }
+
+        // Basic config options
+        final URI uri = new URI(spec.getJarURI());
+        effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
+        effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
+        effectiveConfig.set(DeploymentOptions.TARGET, KUBERNETES_APP_TARGET);
+
+        // Image
+        if (spec.getImageName() != null && !spec.getImageName().isEmpty()) {
+            effectiveConfig.set(KubernetesConfigOptions.CONTAINER_IMAGE, spec.getImageName());
+        }
+        if (spec.getImagePullPolicy() != null && !spec.getImagePullPolicy().isEmpty()) {
+            effectiveConfig.set(
+                KubernetesConfigOptions.CONTAINER_IMAGE_PULL_POLICY,
+                KubernetesConfigOptions.ImagePullPolicy.valueOf(spec.getImagePullPolicy()));
+        }
+
+        // Jars
+        effectiveConfig.set(PipelineOptions.JARS, Collections.singletonList(uri.toString()));
+
+        // Parallelism and Resource
+        if (spec.getParallelism() > 0) {
+            effectiveConfig.set(CoreOptions.DEFAULT_PARALLELISM, spec.getParallelism());
+        }
+        if (spec.getJobManagerResource() != null) {
+            effectiveConfig.setString(JobManagerOptions.TOTAL_PROCESS_MEMORY.key(), spec.getJobManagerResource().getMem());
+            effectiveConfig.set(KubernetesConfigOptions.JOB_MANAGER_CPU, spec.getJobManagerResource().getCpu());
+        }
+        if (spec.getTaskManagerResource() != null) {
+            effectiveConfig.setString(TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(), spec.getTaskManagerResource().getMem());
+            effectiveConfig.set(KubernetesConfigOptions.TASK_MANAGER_CPU, spec.getTaskManagerResource().getCpu());
+        }
+
+        // Dynamic configuration
+        if (spec.getFlinkConfig() != null && !spec.getFlinkConfig().isEmpty()) {
+            spec.getFlinkConfig().forEach(effectiveConfig::setString);
+        }
+
+        return effectiveConfig;
+    }
+
     private void addFlinkApplication(FlinkApplication flinkApplication) {
-        LOG.info("enqueuePodSet(" + flinkApplication.getMetadata().getName() + ")");
+        LOG.info("enqueueFlinkApp(" + flinkApplication.getMetadata().getName() + ")");
         String item = Cache.metaNamespaceKeyFunc(flinkApplication);
         if (item != null && !item.isEmpty()) {
             LOG.info("Adding item {} to work queue", item);

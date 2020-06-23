@@ -1,8 +1,13 @@
 package org.apache.flink.kubernetes.operator.crd;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.CustomResource;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkApplicationSpec;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonDeserialize()
 public class FlinkApplication extends CustomResource {
     public FlinkApplicationSpec getSpec() {
         return spec;
