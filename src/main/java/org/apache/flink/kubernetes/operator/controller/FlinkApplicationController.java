@@ -180,6 +180,11 @@ public class FlinkApplicationController {
                 LOG.info("Recovering {}", clusterId);
                 flinkApps.put(clusterId, new Tuple2<>(flinkApp, effectiveConfig));
             }
+            // Flink app is deleted externally
+            if (deployment == null) {
+                LOG.warn("{} is delete externally.", clusterId);
+                flinkApps.remove(clusterId);
+            }
             // TODO Update existing cluster
         }
     }
@@ -198,6 +203,8 @@ public class FlinkApplicationController {
         effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
         effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
         effectiveConfig.set(DeploymentOptions.TARGET, KUBERNETES_APP_TARGET);
+        // Set rest service exposed type to clusterIP since we will use ingress to access the webui
+        effectiveConfig.set(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE, KubernetesConfigOptions.ServiceExposedType.ClusterIP);
 
         // Image
         if (spec.getImageName() != null && !spec.getImageName().isEmpty()) {
@@ -272,10 +279,11 @@ public class FlinkApplicationController {
                                     String.valueOf(System.currentTimeMillis())));
                             });
                         flinkApp.f0.setStatus(new FlinkApplicationStatus(jobStatusList.toArray(new JobStatus[0])));
-                        flinkAppK8sClient.createOrReplace(flinkApp.f0);
                     } catch (Exception e) {
+                        flinkApp.f0.setStatus(new FlinkApplicationStatus());
                         LOG.warn("Failed to list jobs for {}", flinkApp.f0.getMetadata().getName(), e);
                     }
+                    flinkAppK8sClient.createOrReplace(flinkApp.f0);
                 }
 
                 try {
