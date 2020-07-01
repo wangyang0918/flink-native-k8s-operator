@@ -1,5 +1,7 @@
 # Flink native K8s operator in Java
 
+![Flink native K8s operator](doc/Flink-native-K8s-operator.jpg)
+
 Flink native Kubernetes Operator is a control plane for running Apache Flink native application on Kubernetes. It is java 
 implemented operator, which use fabric8 [Kubernetes Client](https://github.com/fabric8io/kubernetes-client) to contact with K8s apiserver.
 Also instead of running shell commands `flink run/run-application` to start a Flink application, we choose to use Flink 
