@@ -320,11 +320,11 @@ public class FlinkApplicationController {
                                 jobStatusList.add(jobStatus);
                             });
                         flinkApp.f0.setStatus(new FlinkApplicationStatus(jobStatusList.toArray(new JobStatus[0])));
+                        flinkAppK8sClient.createOrReplace(flinkApp.f0);
                     } catch (Exception e) {
                         flinkApp.f0.setStatus(new FlinkApplicationStatus());
                         LOG.warn("Failed to list jobs for {}", flinkApp.f0.getMetadata().getName(), e);
                     }
-                    flinkAppK8sClient.createOrReplace(flinkApp.f0);
                 }
 
                 try {

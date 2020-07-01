@@ -135,15 +135,19 @@ rules:
   - apps
   resources:
   - deployments
-  - daemonsets
   - replicasets
-  - statefulsets
   verbs:
   - "*"
 - apiGroups:
-  - policy
+  - extensions
   resources:
-  - poddisruptionbudgets
+  - deployments
+  verbs:
+  - "*"
+- apiGroups:
+  - flink.k8s.io
+  resources:
+  - flinkapplications
   verbs:
   - "*"
 

@@ -31,6 +31,16 @@ The flink-native-k8s-operator will watch the CRD resources and submit a new Flin
 ```
 kubectl apply -f deploy/cr.yaml
 ```
+
+* Delete a Flink application
+```
+kubectl delete -f deploy/cr.yaml
+
+OR
+
+kubectl delete flinkapp {app_name}
+```
+
 * Get/List Flink applications
 Get all the Flink applications running in the K8s cluster
 ```
@@ -45,5 +55,19 @@ kubectl describe flinkapp {app_name}
 Trigger a new savepoint
 ```
 kubectl edit flinkapp {app_name}
-# Edit the spec of flinkapp and increase the value of "savepointGeneration".
+# Edit the spec of flinkapp and increase the value of `savepointGeneration`.
 ```
+
+## How to access JobManager UI
+By default, we expose the JobManager rest port with `ClusterIP`, which means it could only be accessed in the cluster. In 
+order to access the webUI outside of the K8s cluster, the operator will try to create a ingress entry for each application.
+Then you could use http://{app_name}.flink.k8s.io for the JobManager webUI.
+<div class="alert alert-info" markdown="span">
+  You should add `{app_name}.flink.k8s.io {ingress_ip}` to your local /etc/hosts file.
+  `kubectl get ingress flink-native-k8s-operator` could be used to get the ingress ip address.
+</div>
+
+## Future to do
+* Support native K8s session mode.
+* Support ingress for JobManager webUI
+* Support more fields updating, currently only `savepointGeneration` is supported.
