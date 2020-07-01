@@ -26,4 +26,6 @@ public class FlinkApplicationStatus implements KubernetesResource {
     public void setJobStatuses(JobStatus[] jobStatuses) {
         this.jobStatuses = jobStatuses;
     }
+
+
 }

@@ -17,6 +17,7 @@ import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
@@ -36,6 +37,8 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+import org.apache.flink.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,6 +67,7 @@ public class FlinkApplicationController {
 
     private final BlockingQueue<String> workqueue;
     private final Map<String, Tuple2<FlinkApplication, Configuration>> flinkApps;
+    private final Map<String, String> savepointLocation;
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
@@ -79,6 +83,7 @@ public class FlinkApplicationController {
 
         this.workqueue = new ArrayBlockingQueue<>(1024);
         this.flinkApps = new HashMap<>();
+        this.savepointLocation = new HashMap<>();
     }
 
     public void create() {
@@ -179,13 +184,35 @@ public class FlinkApplicationController {
             if (!flinkApps.containsKey(clusterId)) {
                 LOG.info("Recovering {}", clusterId);
                 flinkApps.put(clusterId, new Tuple2<>(flinkApp, effectiveConfig));
+                return;
             }
             // Flink app is deleted externally
             if (deployment == null) {
                 LOG.warn("{} is delete externally.", clusterId);
                 flinkApps.remove(clusterId);
+                return;
             }
             // TODO Update existing cluster
+
+            FlinkApplication oldFlinkApp = flinkApps.get(clusterId).f0;
+
+            // Trigger a new savepoint
+            final int generation = flinkApp.getSpec().getSavepointGeneration();
+            if (generation > oldFlinkApp.getSpec().getSavepointGeneration()) {
+                try {
+                    final ClusterClient<String> clusterClient = getRestClusterClient(effectiveConfig);
+                    final CompletableFuture<Collection<JobStatusMessage>> jobDetailsFuture = clusterClient.listJobs();
+                    jobDetailsFuture.get().forEach(
+                        status -> {
+                            LOG.debug("JobStatus for {}: ", clusterClient.getClusterId(), status);
+                            clusterClient.triggerSavepoint(status.getJobId(), null)
+                                .thenAccept(path -> savepointLocation.put(status.getJobId().toString(), path));
+                        });
+                } catch (Exception e) {
+                    LOG.warn("Failed to trigger a new savepoint with generation {}", generation);
+                }
+            }
+
         }
     }
 
@@ -207,10 +234,10 @@ public class FlinkApplicationController {
         effectiveConfig.set(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE, KubernetesConfigOptions.ServiceExposedType.ClusterIP);
 
         // Image
-        if (spec.getImageName() != null && !spec.getImageName().isEmpty()) {
+        if (!StringUtils.isNullOrWhitespaceOnly(spec.getImageName())) {
             effectiveConfig.set(KubernetesConfigOptions.CONTAINER_IMAGE, spec.getImageName());
         }
-        if (spec.getImagePullPolicy() != null && !spec.getImagePullPolicy().isEmpty()) {
+        if (!StringUtils.isNullOrWhitespaceOnly(spec.getImagePullPolicy())) {
             effectiveConfig.set(
                 KubernetesConfigOptions.CONTAINER_IMAGE_PULL_POLICY,
                 KubernetesConfigOptions.ImagePullPolicy.valueOf(spec.getImagePullPolicy()));
@@ -230,6 +257,15 @@ public class FlinkApplicationController {
         if (spec.getTaskManagerResource() != null) {
             effectiveConfig.setString(TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(), spec.getTaskManagerResource().getMem());
             effectiveConfig.set(KubernetesConfigOptions.TASK_MANAGER_CPU, spec.getTaskManagerResource().getCpu());
+        }
+
+        // Savepoint
+        if (!StringUtils.isNullOrWhitespaceOnly(spec.getFromSavepoint())) {
+            effectiveConfig.setString(SavepointConfigOptions.SAVEPOINT_PATH, spec.getFromSavepoint());
+            effectiveConfig.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, spec.isAllowNonRestoredState());
+        }
+        if (!StringUtils.isNullOrWhitespaceOnly(spec.getSavepointsDir())) {
+            effectiveConfig.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, spec.getSavepointsDir());
         }
 
         // Dynamic configuration
@@ -272,11 +308,16 @@ public class FlinkApplicationController {
                         jobDetailsFuture.get().forEach(
                             status -> {
                                 LOG.debug("JobStatus for {}: ", clusterClient.getClusterId(), status);
-                                jobStatusList.add(new JobStatus(
+                                final String jobId = status.getJobId().toString();
+                                final JobStatus jobStatus = new JobStatus(
                                     status.getJobName(),
-                                    status.getJobId().toHexString(),
+                                    jobId,
                                     status.getJobState().name(),
-                                    String.valueOf(System.currentTimeMillis())));
+                                    String.valueOf(System.currentTimeMillis()));
+                                if (savepointLocation.containsKey(jobId)) {
+                                    jobStatus.setSavepointLocation(savepointLocation.get(jobId));
+                                }
+                                jobStatusList.add(jobStatus);
                             });
                         flinkApp.f0.setStatus(new FlinkApplicationStatus(jobStatusList.toArray(new JobStatus[0])));
                     } catch (Exception e) {

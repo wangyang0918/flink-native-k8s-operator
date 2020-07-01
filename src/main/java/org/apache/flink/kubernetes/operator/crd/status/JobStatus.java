@@ -14,6 +14,7 @@ public class JobStatus implements KubernetesResource {
     private String jobId;
     private String state;
     private String updateTime;
+    private String savepointLocation;
 
     public JobStatus() {
     }
@@ -55,5 +56,13 @@ public class JobStatus implements KubernetesResource {
 
     public void setUpdateTime(String updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public String getSavepointLocation() {
+        return savepointLocation;
+    }
+
+    public void setSavepointLocation(String savepointLocation) {
+        this.savepointLocation = savepointLocation;
     }
 }

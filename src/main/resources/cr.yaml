@@ -13,5 +13,7 @@ spec:
   taskManagerResource:
     mem: 2048m
     cpu: 1
+  savepointsDir: /tmp/savepoints
+  savepointGeneration: 1
   flinkConfig:
     taskmanager.numberOfTaskSlots: 2
