@@ -142,12 +142,19 @@ rules:
   - extensions
   resources:
   - deployments
+  - ingresses
   verbs:
   - "*"
 - apiGroups:
   - flink.k8s.io
   resources:
   - flinkapplications
+  verbs:
+  - "*"
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
   verbs:
   - "*"
 

@@ -65,11 +65,14 @@ By default, we expose the JobManager rest port with `ClusterIP`, which means it 
 order to access the webUI outside of the K8s cluster, the operator will try to create a ingress entry for each application.
 Then you could use http://{app_name}.flink.k8s.io for the JobManager webUI.
 <div class="alert alert-info" markdown="span">
+  All the Flink app share a same ingress with different rules. This will save a lot public LoadBalancer ip requirements.
+
   You should add `{app_name}.flink.k8s.io {ingress_ip}` to your local /etc/hosts file.
+  
   `kubectl get ingress flink-native-k8s-operator` could be used to get the ingress ip address.
 </div>
 
 ## Future to do
 * Support native K8s session mode.
-* Support ingress for JobManager webUI
+* ~~Support ingress for JobManager webUI~~
 * Support more fields updating, currently only `savepointGeneration` is supported.

@@ -1,6 +1,10 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.extensions.HTTPIngressRuleValueBuilder;
+import io.fabric8.kubernetes.api.model.extensions.Ingress;
+import io.fabric8.kubernetes.api.model.extensions.IngressBuilder;
+import io.fabric8.kubernetes.api.model.extensions.IngressRule;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
@@ -16,33 +20,21 @@ import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
 import org.apache.flink.client.program.ClusterClient;
-import org.apache.flink.client.program.rest.RestClusterClient;
-import org.apache.flink.configuration.CheckpointingOptions;
-import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.CoreOptions;
-import org.apache.flink.configuration.DeploymentOptions;
-import org.apache.flink.configuration.GlobalConfiguration;
-import org.apache.flink.configuration.JobManagerOptions;
-import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.RestOptions;
-import org.apache.flink.configuration.TaskManagerOptions;
-import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.operator.Utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.Utils.Constants;
+import org.apache.flink.kubernetes.operator.Utils.KubernetesUtils;
 import org.apache.flink.kubernetes.operator.crd.DoneableFlinkApplication;
 import org.apache.flink.kubernetes.operator.crd.FlinkApplication;
 import org.apache.flink.kubernetes.operator.crd.FlinkApplicationList;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkApplicationSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkApplicationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.runtime.client.JobStatusMessage;
-import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
-import org.apache.flink.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -52,13 +44,15 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import static org.apache.flink.kubernetes.operator.Utils.Constants.FLINK_NATIVE_K8S_OPERATOR_NAME;
 
 public class FlinkApplicationController {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkApplicationController.class);
     private static final int RECONCILE_INTERVAL_MS = 3000;
-    private static final String KUBERNETES_APP_TARGET = "kubernetes-application";
 
     private final KubernetesClient kubernetesClient;
     private final MixedOperation<FlinkApplication, FlinkApplicationList, DoneableFlinkApplication, Resource<FlinkApplication, DoneableFlinkApplication>> flinkAppK8sClient;
@@ -71,6 +65,8 @@ public class FlinkApplicationController {
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
+    private final String operatorNamespace;
+
     public FlinkApplicationController(
             KubernetesClient kubernetesClient,
             MixedOperation<FlinkApplication, FlinkApplicationList, DoneableFlinkApplication, Resource<FlinkApplication, DoneableFlinkApplication>> flinkAppK8sClient,
@@ -80,9 +76,10 @@ public class FlinkApplicationController {
         this.flinkAppK8sClient = flinkAppK8sClient;
         this.flinkClusterLister = new Lister<>(flinkAppInformer.getIndexer(), namespace);
         this.flinkAppInformer = flinkAppInformer;
+        this.operatorNamespace = namespace;
 
         this.workqueue = new ArrayBlockingQueue<>(1024);
-        this.flinkApps = new HashMap<>();
+        this.flinkApps = new ConcurrentHashMap<>();
         this.savepointLocation = new HashMap<>();
     }
 
@@ -157,11 +154,11 @@ public class FlinkApplicationController {
     private void reconcile(FlinkApplication flinkApp) {
         final String namespace = flinkApp.getMetadata().getNamespace();
         final String clusterId = flinkApp.getMetadata().getName();
-        final Deployment deployment = kubernetesClient.apps().deployments().withName(clusterId).get();
+        final Deployment deployment = kubernetesClient.apps().deployments().inNamespace(namespace).withName(clusterId).get();
 
         final Configuration effectiveConfig;
         try {
-            effectiveConfig = getEffectiveConfig(namespace, clusterId, flinkApp.getSpec());
+            effectiveConfig = FlinkUtils.getEffectiveConfig(namespace, clusterId, flinkApp.getSpec());
         } catch (Exception e) {
             LOG.error("Failed to load configuration", e);
             return;
@@ -169,6 +166,7 @@ public class FlinkApplicationController {
 
         // Create new Flink application
         if (!flinkApps.containsKey(clusterId) && deployment == null) {
+            // Deploy application
             final ClusterClientServiceLoader clusterClientServiceLoader = new DefaultClusterClientServiceLoader();
             final ApplicationDeployer deployer = new ApplicationClusterDeployer(clusterClientServiceLoader);
 
@@ -179,7 +177,10 @@ public class FlinkApplicationController {
             } catch (Exception e) {
                 LOG.error("Failed to deploy cluster {}", clusterId, e);
             }
+
             flinkApps.put(clusterId, new Tuple2<>(flinkApp, effectiveConfig));
+
+            updateIngress();
         } else {
             if (!flinkApps.containsKey(clusterId)) {
                 LOG.info("Recovering {}", clusterId);
@@ -192,88 +193,63 @@ public class FlinkApplicationController {
                 flinkApps.remove(clusterId);
                 return;
             }
-            // TODO Update existing cluster
 
             FlinkApplication oldFlinkApp = flinkApps.get(clusterId).f0;
 
             // Trigger a new savepoint
-            final int generation = flinkApp.getSpec().getSavepointGeneration();
-            if (generation > oldFlinkApp.getSpec().getSavepointGeneration()) {
-                try {
-                    final ClusterClient<String> clusterClient = getRestClusterClient(effectiveConfig);
-                    final CompletableFuture<Collection<JobStatusMessage>> jobDetailsFuture = clusterClient.listJobs();
-                    jobDetailsFuture.get().forEach(
-                        status -> {
-                            LOG.debug("JobStatus for {}: ", clusterClient.getClusterId(), status);
-                            clusterClient.triggerSavepoint(status.getJobId(), null)
-                                .thenAccept(path -> savepointLocation.put(status.getJobId().toString(), path));
-                        });
-                } catch (Exception e) {
-                    LOG.warn("Failed to trigger a new savepoint with generation {}", generation);
-                }
-            }
+            triggerSavepoint(oldFlinkApp, flinkApp, effectiveConfig);
 
+            // TODO support more fields updating, e.g. image, resources
         }
     }
 
-    private Configuration getEffectiveConfig(String namespace, String clusterId, FlinkApplicationSpec spec) throws Exception {
-        final String flinkConfDir = System.getenv().get(ConfigConstants.ENV_FLINK_CONF_DIR);
-        final Configuration effectiveConfig;
-        if (flinkConfDir != null) {
-            effectiveConfig = GlobalConfiguration.loadConfiguration(flinkConfDir);
+    private void updateIngress() {
+        final List<IngressRule> ingressRules = new ArrayList<>();
+        for (Tuple2<FlinkApplication, Configuration> entry : flinkApps.values()) {
+            final FlinkApplication flinkApp = entry.f0;
+            final String clusterId = flinkApp.getMetadata().getName();
+            final int restPort = entry.f1.getInteger(RestOptions.PORT);
+
+            final String ingressHost = clusterId + Constants.INGRESS_SUFFIX;
+            ingressRules.add(new IngressRule(ingressHost, new HTTPIngressRuleValueBuilder()
+                .addNewPath()
+                .withNewBackend().withNewServiceName(clusterId + Constants.REST_SVC_NAME_SUFFIX).withNewServicePort(restPort).endBackend()
+                .endPath()
+                .build()));
+        }
+        final Ingress ingress = new IngressBuilder()
+            .withApiVersion(Constants.INGRESS_API_VERSION)
+            .withNewMetadata().withName(FLINK_NATIVE_K8S_OPERATOR_NAME).endMetadata()
+            .withNewSpec()
+            .withRules(ingressRules)
+            .endSpec()
+            .build();
+        // Get operator deploy
+        final Deployment deployment = kubernetesClient.apps().deployments().inNamespace(operatorNamespace).withName(FLINK_NATIVE_K8S_OPERATOR_NAME).get();
+        if (deployment == null) {
+            LOG.warn("Could not find deployment {}", FLINK_NATIVE_K8S_OPERATOR_NAME);
         } else {
-            effectiveConfig = new Configuration();
+            KubernetesUtils.setOwnerReference(deployment, Collections.singletonList(ingress));
         }
+        kubernetesClient.resourceList(ingress).inNamespace(operatorNamespace).createOrReplace();
+    }
 
-        // Basic config options
-        final URI uri = new URI(spec.getJarURI());
-        effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
-        effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
-        effectiveConfig.set(DeploymentOptions.TARGET, KUBERNETES_APP_TARGET);
-        // Set rest service exposed type to clusterIP since we will use ingress to access the webui
-        effectiveConfig.set(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE, KubernetesConfigOptions.ServiceExposedType.ClusterIP);
-
-        // Image
-        if (!StringUtils.isNullOrWhitespaceOnly(spec.getImageName())) {
-            effectiveConfig.set(KubernetesConfigOptions.CONTAINER_IMAGE, spec.getImageName());
+    private void triggerSavepoint(FlinkApplication oldFlinkApp, FlinkApplication newFlinkApp, Configuration effectiveConfig) {
+        final int generation = newFlinkApp.getSpec().getSavepointGeneration();
+        if (generation > oldFlinkApp.getSpec().getSavepointGeneration()) {
+            try {
+                ClusterClient<String> clusterClient = FlinkUtils.getRestClusterClient(effectiveConfig);
+                final CompletableFuture<Collection<JobStatusMessage>> jobDetailsFuture = clusterClient.listJobs();
+                jobDetailsFuture.get().forEach(
+                    status -> {
+                        LOG.debug("JobStatus for {}: ", clusterClient.getClusterId(), status);
+                        clusterClient.triggerSavepoint(status.getJobId(), null)
+                            .thenAccept(path -> savepointLocation.put(status.getJobId().toString(), path));
+                    });
+            } catch (Exception e) {
+                LOG.warn("Failed to trigger a new savepoint with generation {}", generation);
+            }
         }
-        if (!StringUtils.isNullOrWhitespaceOnly(spec.getImagePullPolicy())) {
-            effectiveConfig.set(
-                KubernetesConfigOptions.CONTAINER_IMAGE_PULL_POLICY,
-                KubernetesConfigOptions.ImagePullPolicy.valueOf(spec.getImagePullPolicy()));
-        }
-
-        // Jars
-        effectiveConfig.set(PipelineOptions.JARS, Collections.singletonList(uri.toString()));
-
-        // Parallelism and Resource
-        if (spec.getParallelism() > 0) {
-            effectiveConfig.set(CoreOptions.DEFAULT_PARALLELISM, spec.getParallelism());
-        }
-        if (spec.getJobManagerResource() != null) {
-            effectiveConfig.setString(JobManagerOptions.TOTAL_PROCESS_MEMORY.key(), spec.getJobManagerResource().getMem());
-            effectiveConfig.set(KubernetesConfigOptions.JOB_MANAGER_CPU, spec.getJobManagerResource().getCpu());
-        }
-        if (spec.getTaskManagerResource() != null) {
-            effectiveConfig.setString(TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(), spec.getTaskManagerResource().getMem());
-            effectiveConfig.set(KubernetesConfigOptions.TASK_MANAGER_CPU, spec.getTaskManagerResource().getCpu());
-        }
-
-        // Savepoint
-        if (!StringUtils.isNullOrWhitespaceOnly(spec.getFromSavepoint())) {
-            effectiveConfig.setString(SavepointConfigOptions.SAVEPOINT_PATH, spec.getFromSavepoint());
-            effectiveConfig.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, spec.isAllowNonRestoredState());
-        }
-        if (!StringUtils.isNullOrWhitespaceOnly(spec.getSavepointsDir())) {
-            effectiveConfig.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, spec.getSavepointsDir());
-        }
-
-        // Dynamic configuration
-        if (spec.getFlinkConfig() != null && !spec.getFlinkConfig().isEmpty()) {
-            spec.getFlinkConfig().forEach(effectiveConfig::setString);
-        }
-
-        return effectiveConfig;
     }
 
     private void addToWorkQueue(FlinkApplication flinkApplication) {
@@ -284,17 +260,6 @@ public class FlinkApplicationController {
         }
     }
 
-    private ClusterClient<String> getRestClusterClient(Configuration config) throws Exception {
-        final String clusterId = config.get(KubernetesConfigOptions.CLUSTER_ID);
-        final String namespace = config.get(KubernetesConfigOptions.NAMESPACE);
-        final int port = config.getInteger(RestOptions.PORT);
-        final String restServerAddress = String.format("http://%s-rest.%s:%s", clusterId, namespace, port);
-        return new RestClusterClient<>(
-            config,
-            clusterId,
-            new StandaloneClientHAServices(restServerAddress));
-    }
-
     private class JobStatusUpdater implements Runnable {
         @Override
         public void run() {
@@ -302,7 +267,7 @@ public class FlinkApplicationController {
             while (true) {
                 for (Tuple2<FlinkApplication, Configuration> flinkApp : flinkApps.values()) {
                     try {
-                        final ClusterClient<String> clusterClient = getRestClusterClient(flinkApp.f1);
+                        final ClusterClient<String> clusterClient = FlinkUtils.getRestClusterClient(flinkApp.f1);
                         final CompletableFuture<Collection<JobStatusMessage>> jobDetailsFuture = clusterClient.listJobs();
                         final List<JobStatus> jobStatusList = new ArrayList<>();
                         jobDetailsFuture.get().forEach(
@@ -320,7 +285,7 @@ public class FlinkApplicationController {
                                 jobStatusList.add(jobStatus);
                             });
                         flinkApp.f0.setStatus(new FlinkApplicationStatus(jobStatusList.toArray(new JobStatus[0])));
-                        flinkAppK8sClient.createOrReplace(flinkApp.f0);
+                        flinkAppK8sClient.inNamespace(flinkApp.f0.getMetadata().getNamespace()).createOrReplace(flinkApp.f0);
                     } catch (Exception e) {
                         flinkApp.f0.setStatus(new FlinkApplicationStatus());
                         LOG.warn("Failed to list jobs for {}", flinkApp.f0.getMetadata().getName(), e);
