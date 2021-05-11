@@ -30,8 +30,8 @@ spec:
           items:
           - key: flink-conf.yaml
             path: flink-conf.yaml
-          - key: log4j.properties
-            path: log4j.properties
+          - key: log4j-console.properties
+            path: log4j-console.properties
 
 ---
 
@@ -52,7 +52,7 @@ data:
     jobmanager.memory.process.size: 1600m
     taskmanager.memory.process.size: 1728m
     parallelism.default: 2
-  log4j.properties: |+
+  log4j-console.properties: |+
     # This affects logging for both user code and Flink
     rootLogger.level = INFO
     rootLogger.appenderRef.console.ref = ConsoleAppender
