@@ -1,7 +1,7 @@
 package org.apache.flink.kubernetes.operator;
 
-import io.fabric8.kubernetes.api.model.apiextensions.CustomResourceDefinition;
-import io.fabric8.kubernetes.api.model.apiextensions.CustomResourceDefinitionBuilder;
+import io.fabric8.kubernetes.api.model.apiextensions.v1beta1.CustomResourceDefinition;
+import io.fabric8.kubernetes.api.model.apiextensions.v1beta1.CustomResourceDefinitionBuilder;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
@@ -11,7 +11,6 @@ import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.fabric8.kubernetes.client.informers.SharedInformerFactory;
 import org.apache.flink.kubernetes.operator.controller.FlinkApplicationController;
-import org.apache.flink.kubernetes.operator.crd.DoneableFlinkApplication;
 import org.apache.flink.kubernetes.operator.crd.FlinkApplication;
 import org.apache.flink.kubernetes.operator.crd.FlinkApplicationList;
 import org.slf4j.Logger;
@@ -57,12 +56,10 @@ public class KubernetesOperatorEntrypoint {
 	            FlinkApplication.class,
 	            FlinkApplicationList.class,
 	            10 * 60 * 1000);
-	        MixedOperation<FlinkApplication, FlinkApplicationList, DoneableFlinkApplication, Resource<FlinkApplication, DoneableFlinkApplication>> flinkAppK8sClient =
-		        k8sClient.customResources(
-		        	crdDefinition,
-			        FlinkApplication.class,
-			        FlinkApplicationList.class,
-			        DoneableFlinkApplication.class);
+			final MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>> flinkAppK8sClient =
+					(MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>>)
+							k8sClient.customResources(FlinkApplication.class, FlinkApplicationList.class)
+									.inNamespace(namespace);
 
             FlinkApplicationController flinkApplicationController = new FlinkApplicationController(
 	            k8sClient,

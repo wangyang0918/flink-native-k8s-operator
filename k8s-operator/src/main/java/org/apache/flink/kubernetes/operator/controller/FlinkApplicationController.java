@@ -25,7 +25,6 @@ import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.Utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.Utils.Constants;
 import org.apache.flink.kubernetes.operator.Utils.KubernetesUtils;
-import org.apache.flink.kubernetes.operator.crd.DoneableFlinkApplication;
 import org.apache.flink.kubernetes.operator.crd.FlinkApplication;
 import org.apache.flink.kubernetes.operator.crd.FlinkApplicationList;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkApplicationStatus;
@@ -55,7 +54,7 @@ public class FlinkApplicationController {
     private static final int RECONCILE_INTERVAL_MS = 3000;
 
     private final KubernetesClient kubernetesClient;
-    private final MixedOperation<FlinkApplication, FlinkApplicationList, DoneableFlinkApplication, Resource<FlinkApplication, DoneableFlinkApplication>> flinkAppK8sClient;
+    private final MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>> flinkAppK8sClient;
     private final SharedIndexInformer<FlinkApplication> flinkAppInformer;
     private final Lister<FlinkApplication> flinkClusterLister;
 
@@ -69,7 +68,7 @@ public class FlinkApplicationController {
 
     public FlinkApplicationController(
             KubernetesClient kubernetesClient,
-            MixedOperation<FlinkApplication, FlinkApplicationList, DoneableFlinkApplication, Resource<FlinkApplication, DoneableFlinkApplication>> flinkAppK8sClient,
+            MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>> flinkAppK8sClient,
             SharedIndexInformer<FlinkApplication> flinkAppInformer,
             String namespace) {
         this.kubernetesClient = kubernetesClient;
