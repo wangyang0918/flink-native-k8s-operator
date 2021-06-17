@@ -1,5 +1,6 @@
 package org.apache.flink.kubernetes.operator;
 
+import io.fabric8.kubernetes.api.model.KubernetesResourceList;
 import io.fabric8.kubernetes.api.model.apiextensions.v1beta1.CustomResourceDefinition;
 import io.fabric8.kubernetes.api.model.apiextensions.v1beta1.CustomResourceDefinitionBuilder;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
@@ -51,15 +52,11 @@ public class KubernetesOperatorEntrypoint {
 
             final SharedInformerFactory informerFactory = k8sClient.informers();
 
-            final SharedIndexInformer<FlinkApplication> flinkAppinformer = informerFactory.sharedIndexInformerForCustomResource(
-            	crdContext,
-	            FlinkApplication.class,
-	            FlinkApplicationList.class,
-	            10 * 60 * 1000);
-			final MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>> flinkAppK8sClient =
-					(MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>>)
-							k8sClient.customResources(FlinkApplication.class, FlinkApplicationList.class)
-									.inNamespace(namespace);
+					final SharedIndexInformer<FlinkApplication> flinkAppinformer = informerFactory
+							.sharedIndexInformerForCustomResource(FlinkApplication.class, FlinkApplicationList.class, 10 * 60 * 1000);
+
+					MixedOperation<FlinkApplication, KubernetesResourceList<FlinkApplication>, Resource<FlinkApplication>>  flinkAppK8sClient =
+							k8sClient.customResources(FlinkApplication.class);
 
             FlinkApplicationController flinkApplicationController = new FlinkApplicationController(
 	            k8sClient,

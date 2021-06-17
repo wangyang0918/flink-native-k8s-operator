@@ -1,5 +1,6 @@
 package org.apache.flink.kubernetes.operator.controller;
 
+import io.fabric8.kubernetes.api.model.KubernetesResourceList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.extensions.HTTPIngressRuleValueBuilder;
 import io.fabric8.kubernetes.api.model.extensions.Ingress;
@@ -54,7 +55,7 @@ public class FlinkApplicationController {
     private static final int RECONCILE_INTERVAL_MS = 3000;
 
     private final KubernetesClient kubernetesClient;
-    private final MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>> flinkAppK8sClient;
+    private final MixedOperation<FlinkApplication, KubernetesResourceList<FlinkApplication>, Resource<FlinkApplication>> flinkAppK8sClient;
     private final SharedIndexInformer<FlinkApplication> flinkAppInformer;
     private final Lister<FlinkApplication> flinkClusterLister;
 
@@ -68,7 +69,7 @@ public class FlinkApplicationController {
 
     public FlinkApplicationController(
             KubernetesClient kubernetesClient,
-            MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>> flinkAppK8sClient,
+            MixedOperation<FlinkApplication, KubernetesResourceList<FlinkApplication>, Resource<FlinkApplication>> flinkAppK8sClient,
             SharedIndexInformer<FlinkApplication> flinkAppInformer,
             String namespace) {
         this.kubernetesClient = kubernetesClient;
