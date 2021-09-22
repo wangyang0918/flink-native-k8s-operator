@@ -238,7 +238,6 @@ public class FlinkApplicationController {
         final int generation = newFlinkApp.getSpec().getSavepointGeneration();
         if (generation > oldFlinkApp.getSpec().getSavepointGeneration()) {
             try (ClusterClient<String> clusterClient = FlinkUtils.getRestClusterClient(effectiveConfig)) {
-
                 final CompletableFuture<Collection<JobStatusMessage>> jobDetailsFuture = clusterClient.listJobs();
                 jobDetailsFuture.get().forEach(
                     status -> {
