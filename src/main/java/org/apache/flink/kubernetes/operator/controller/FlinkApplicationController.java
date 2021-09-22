@@ -237,14 +237,15 @@ public class FlinkApplicationController {
     private void triggerSavepoint(FlinkApplication oldFlinkApp, FlinkApplication newFlinkApp, Configuration effectiveConfig) {
         final int generation = newFlinkApp.getSpec().getSavepointGeneration();
         if (generation > oldFlinkApp.getSpec().getSavepointGeneration()) {
-            try {
-                ClusterClient<String> clusterClient = FlinkUtils.getRestClusterClient(effectiveConfig);
+            try (ClusterClient<String> clusterClient = FlinkUtils.getRestClusterClient(effectiveConfig)) {
+
                 final CompletableFuture<Collection<JobStatusMessage>> jobDetailsFuture = clusterClient.listJobs();
                 jobDetailsFuture.get().forEach(
                     status -> {
-                        LOG.debug("JobStatus for {}: ", clusterClient.getClusterId(), status);
+                        LOG.debug("JobStatus for {}: {}", clusterClient.getClusterId(), status);
                         clusterClient.triggerSavepoint(status.getJobId(), null)
-                            .thenAccept(path -> savepointLocation.put(status.getJobId().toString(), path));
+                            .thenAccept(path -> savepointLocation.put(status.getJobId().toString(), path))
+                            .join();
                     });
             } catch (Exception e) {
                 LOG.warn("Failed to trigger a new savepoint with generation {}", generation);
@@ -266,13 +267,12 @@ public class FlinkApplicationController {
             LOG.info("Starting JobStatusUpdater");
             while (true) {
                 for (Tuple2<FlinkApplication, Configuration> flinkApp : flinkApps.values()) {
-                    try {
-                        final ClusterClient<String> clusterClient = FlinkUtils.getRestClusterClient(flinkApp.f1);
+                    try (final ClusterClient<String> clusterClient = FlinkUtils.getRestClusterClient(flinkApp.f1)) {
                         final CompletableFuture<Collection<JobStatusMessage>> jobDetailsFuture = clusterClient.listJobs();
                         final List<JobStatus> jobStatusList = new ArrayList<>();
                         jobDetailsFuture.get().forEach(
                             status -> {
-                                LOG.debug("JobStatus for {}: ", clusterClient.getClusterId(), status);
+                                LOG.debug("JobStatus for {}: {}", clusterClient.getClusterId(), status);
                                 final String jobId = status.getJobId().toString();
                                 final JobStatus jobStatus = new JobStatus(
                                     status.getJobName(),
