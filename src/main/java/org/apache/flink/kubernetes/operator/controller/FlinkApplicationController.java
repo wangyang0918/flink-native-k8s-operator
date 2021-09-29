@@ -213,6 +213,7 @@ public class FlinkApplicationController {
             final String ingressHost = clusterId + Constants.INGRESS_SUFFIX;
             ingressRules.add(new IngressRule(ingressHost, new HTTPIngressRuleValueBuilder()
                 .addNewPath()
+                .withPathType("ImplementationSpecific")
                 .withNewBackend().withNewServiceName(clusterId + Constants.REST_SVC_NAME_SUFFIX).withNewServicePort(restPort).endBackend()
                 .endPath()
                 .build()));
@@ -231,6 +232,7 @@ public class FlinkApplicationController {
         } else {
             KubernetesUtils.setOwnerReference(deployment, Collections.singletonList(ingress));
         }
+        LOG.info(ingress.toString());
         kubernetesClient.resourceList(ingress).inNamespace(operatorNamespace).createOrReplace();
     }
 

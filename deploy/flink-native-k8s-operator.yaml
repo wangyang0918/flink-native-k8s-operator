@@ -15,7 +15,7 @@ spec:
       serviceAccountName: flink-native-k8s-operator
       containers:
       - name: flink-native-k8s-operator
-        image: registry.cn-beijing.aliyuncs.com/streamcompute/flink-native-k8s-operator:1.0
+        image: wangyang09180523/flink-native-k8s-operator:1.0
         imagePullPolicy: Always
         env:
           - name: FLINK_CONF_DIR
@@ -109,7 +109,7 @@ metadata:
 
 apiVersion: v1
 kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: flink-native-k8s-operator
 rules:
@@ -162,7 +162,7 @@ rules:
 
 apiVersion: v1
 kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: flink-native-k8s-operator-cluster-role-binding
 subjects:

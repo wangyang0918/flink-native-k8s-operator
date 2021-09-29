@@ -6,6 +6,6 @@ public class Constants {
 
 	public static final String REST_SVC_NAME_SUFFIX = "-rest";
 
-	public static final String INGRESS_API_VERSION = "networking.k8s.io/v1beta1";
+	public static final String INGRESS_API_VERSION = "networking.k8s.io/v1";
 	public static final String INGRESS_SUFFIX = ".flink.k8s.io";
 }

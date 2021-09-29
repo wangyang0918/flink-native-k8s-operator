@@ -1,21 +1,20 @@
 apiVersion: flink.k8s.io/v1alpha1
 kind: FlinkApplication
 metadata:
-  namespace: default
   name: flink-example-statemachine
 spec:
-  imageName: registry.cn-beijing.aliyuncs.com/streamcompute/flink:1.11
+  imageName: apache/flink:1.12.5
   jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
-  parallelism: 5
+  parallelism: 2
   jobManagerResource:
-    mem: 4096m
-    cpu: 1.5
+    mem: 1024m
+    cpu: 0.5
   taskManagerResource:
-    mem: 2048m
-    cpu: 1
+    mem: 1024m
+    cpu: 0.5
   savepointsDir: file:///tmp/savepoints
   savepointGeneration: 0
   flinkConfig:
-    taskmanager.numberOfTaskSlots: 2
+    taskmanager.numberOfTaskSlots: "2"
     kubernetes.jobmanager.service-account: flink-native-k8s-operator
     kubernetes.container-start-command-template: "%java% %classpath% %jvmmem% %jvmopts% %logging% %class% %args%"
