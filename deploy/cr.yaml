@@ -3,7 +3,7 @@ kind: FlinkApplication
 metadata:
   name: flink-example-statemachine
 spec:
-  imageName: apache/flink:1.12.5
+  imageName: apache/flink:1.14.2
   jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
   parallelism: 2
   jobManagerResource:
@@ -17,4 +17,3 @@ spec:
   flinkConfig:
     taskmanager.numberOfTaskSlots: "2"
     kubernetes.jobmanager.service-account: flink-native-k8s-operator
-    kubernetes.container-start-command-template: "%java% %classpath% %jvmmem% %jvmopts% %logging% %class% %args%"

@@ -1,23 +1,16 @@
-package org.apache.flink.kubernetes.operator.crd.status;
+package org.apache.flink.kubernetes.operator.api.v1alpha1;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import io.fabric8.kubernetes.api.model.KubernetesResource;
 import lombok.ToString;
 
-@JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonDeserialize()
 @ToString
-
-public class JobStatus implements KubernetesResource {
+public class JobStatus {
     private String jobName;
     private String jobId;
     private String state;
     private String updateTime;
     private String savepointLocation;
 
-    public JobStatus() {
-    }
+    public JobStatus() {}
 
     public JobStatus(String jobName, String jobId, String state, String updateTime) {
         this.jobName = jobName;
