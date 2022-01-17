@@ -1,0 +1,32 @@
+name: CI
+on:
+  - push
+  - pull_request
+jobs:
+  job1:
+    runs-on: ubuntu-latest
+    name: build example and deploy to minikube
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up JDK 8
+        uses: actions/setup-java@v2
+        with:
+          java-version: '8'
+          distribution: 'adopt'
+      - name: Build with Maven
+        run: mvn clean install
+      - name: Start minikube
+        uses: medyagh/setup-minikube@master
+      - name: Try the cluster !
+        run: kubectl get pods -A
+      - name: Build image
+        run: |
+          export SHELL=/bin/bash
+          eval $(minikube -p minikube docker-env)
+          docker build -f ./Dockerfile -t wangyang09180523/flink-native-k8s-operator:1.1 .
+          echo -n "verifying images:"
+          docker images
+      - name: Run the e2e test
+        run: |
+          echo "$PWD"
+          ./e2e-test/test_kubernetes_application.sh

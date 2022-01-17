@@ -16,7 +16,7 @@ spec:
       containers:
       - name: flink-native-k8s-operator
         image: wangyang09180523/flink-native-k8s-operator:1.1
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         env:
           - name: FLINK_CONF_DIR
             value: /opt/flink/conf
@@ -49,8 +49,6 @@ data:
     jobmanager.rpc.port: 6123
     taskmanager.rpc.port: 6122
     queryable-state.proxy.ports: 6125
-    jobmanager.memory.process.size: 1600m
-    taskmanager.memory.process.size: 1728m
     parallelism.default: 2
   log4j-console.properties: |+
     # This affects logging for both user code and Flink
