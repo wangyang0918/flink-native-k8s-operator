@@ -98,7 +98,6 @@ public class FlinkApplicationController {
                                 .deployments()
                                 .inNamespace(namespace)
                                 .withName(clusterId)
-                                .cascading(true)
                                 .delete();
                         flinkApps.remove(clusterId);
                     }
@@ -119,7 +118,7 @@ public class FlinkApplicationController {
                     LOG.info("Work queue is empty");
                 }
                 String item = workqueue.take();
-                if (item.isEmpty() || (!item.contains("/"))) {
+                if ((!item.contains("/"))) {
                     LOG.warn("Ignoring invalid resource item: {}", item);
                 }
 
@@ -160,6 +159,7 @@ public class FlinkApplicationController {
         try {
             effectiveConfig =
                     FlinkUtils.getEffectiveConfig(namespace, clusterId, flinkApp.getSpec());
+            LOG.info("Effective configuration: {}", effectiveConfig);
         } catch (Exception e) {
             LOG.error("Failed to load configuration", e);
             return;
