@@ -33,8 +33,18 @@ import io.fabric8.kubernetes.client.informers.cache.Lister;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.apache.flink.kubernetes.operator.utils.Constants.FLINK_NATIVE_K8S_OPERATOR_NAME;
 
@@ -71,9 +81,11 @@ public class FlinkApplicationController {
         this.workqueue = new ArrayBlockingQueue<>(1024);
         this.flinkApps = new ConcurrentHashMap<>();
         this.savepointLocation = new HashMap<>();
+
+        this.initInformerEventHandlers();
     }
 
-    public void create() {
+    private void initInformerEventHandlers() {
         flinkAppInformer.addEventHandler(
                 new ResourceEventHandler<FlinkApplication>() {
                     @Override
@@ -109,7 +121,7 @@ public class FlinkApplicationController {
         LOG.info("Starting FlinkApplication controller");
         executorService.submit(new JobStatusUpdater());
 
-        while (true) {
+        while (!Thread.currentThread().isInterrupted()) {
             if (!flinkAppInformer.hasSynced()) {
                 continue;
             }
@@ -135,6 +147,7 @@ public class FlinkApplicationController {
                 reconcile(flinkApplication);
 
             } catch (InterruptedException interruptedException) {
+                Thread.currentThread().interrupt();
                 LOG.error("Controller interrupted");
             }
         }
@@ -304,7 +317,7 @@ public class FlinkApplicationController {
         @Override
         public void run() {
             LOG.info("Starting JobStatusUpdater");
-            while (true) {
+            while (!Thread.currentThread().isInterrupted()) {
                 for (Tuple2<FlinkApplication, Configuration> flinkApp : flinkApps.values()) {
                     try (final ClusterClient<String> clusterClient =
                             FlinkUtils.getRestClusterClient(flinkApp.f1)) {

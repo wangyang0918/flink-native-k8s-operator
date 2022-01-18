@@ -1,10 +1,10 @@
 package org.apache.flink.kubernetes.operator.api.v1alpha1;
 
-import io.fabric8.kubernetes.api.model.KubernetesResource;
 import lombok.ToString;
 
 @ToString
-public class Resource implements KubernetesResource {
+public class Resource {
+
     private double cpu;
     // 1024m, 1g
     private String mem;
