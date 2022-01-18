@@ -74,7 +74,7 @@ public class FlinkApplicationController {
             String namespace) {
         this.kubernetesClient = kubernetesClient;
         this.flinkAppK8sClient = flinkAppK8sClient;
-        this.flinkClusterLister = new Lister<>(flinkAppInformer.getIndexer(), namespace);
+        this.flinkClusterLister = new Lister<>(flinkAppInformer.getIndexer(), null);
         this.flinkAppInformer = flinkAppInformer;
         this.operatorNamespace = namespace;
 
@@ -130,16 +130,14 @@ public class FlinkApplicationController {
                     LOG.info("Work queue is empty");
                 }
                 String item = workqueue.take();
+                // Get the FlinkApplication resource's name from key which is in format
+                // namespace/name
                 if ((!item.contains("/"))) {
                     LOG.warn("Ignoring invalid resource item: {}", item);
                 }
-
-                // Get the FlinkApplication resource's name from key which is in format
-                // namespace/name
-                String name = item.split("/")[1];
-                FlinkApplication flinkApplication = flinkClusterLister.get(item.split("/")[1]);
+                FlinkApplication flinkApplication = flinkClusterLister.get(item);
                 if (flinkApplication == null) {
-                    LOG.error("FlinkApplication {} in work queue no longer exists", name);
+                    LOG.error("FlinkApplication {} in work queue no longer exists", item);
                     continue;
                 }
                 LOG.info("Reconciling " + flinkApplication);

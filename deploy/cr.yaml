@@ -16,4 +16,4 @@ spec:
   savepointGeneration: 0
   flinkConfig:
     taskmanager.numberOfTaskSlots: "2"
-    kubernetes.jobmanager.service-account: flink-native-k8s-operator
+    kubernetes.jobmanager.service-account: flink

@@ -24,9 +24,13 @@ docker build . -t flink-native-k8s-operator:1.0
 docker push
 ```
 * Start flink-native-k8s-operator deployment
-A new `ServiceAccount` "flink-native-k8s-operator" will be created with enough permission to create/list pods and services.
 ```
  kubectl apply -f deploy/flink-native-k8s-operator.yaml
+```
+* Apply the rbac for flink
+A new `ServiceAccount` "flink" will be created with enough permission to create/delete pods and ConfigMaps.
+```
+ kubectl apply -f deploy/flink-rbac.yaml
 ```
 * Create a new Flink application
 The flink-native-k8s-operator will watch the CRD resources and submit a new Flink application once the CR it applied.
