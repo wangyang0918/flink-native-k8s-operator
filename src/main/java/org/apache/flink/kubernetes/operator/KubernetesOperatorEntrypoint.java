@@ -23,11 +23,11 @@ public class KubernetesOperatorEntrypoint {
         try (KubernetesClient kubeClient = new DefaultKubernetesClient()) {
             String namespace = kubeClient.getNamespace();
             if (namespace == null) {
-                LOG.info("No namespace found via config, assuming default.");
+                LOG.debug("No namespace found via config, assuming default.");
                 namespace = "default";
             }
 
-            LOG.info("Using namespace : " + namespace);
+            LOG.info("Flink K8s operator is running in namespace : " + namespace);
 
             final SharedInformerFactory informerFactory = kubeClient.informers();
 

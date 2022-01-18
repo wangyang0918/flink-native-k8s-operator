@@ -19,11 +19,12 @@
 
 CLUSTER_ID="flink-example-statemachine"
 TIMEOUT=300
+TEST_NAMESPACE="flink-test"
 
 function check_logs_output {
   local pod_name=$1
   local successful_response_regex=$2
-  LOG_CONTENT=$(kubectl logs $pod_name 2> /dev/null)
+  LOG_CONTENT=$(kubectl -n ${TEST_NAMESPACE} logs $pod_name 2> /dev/null)
 
   # ensure the log content adapts with the successful regex
   if [[ ${LOG_CONTENT} =~ ${successful_response_regex} ]]; then
@@ -38,7 +39,7 @@ function wait_for_logs {
   local timeout=${3:-${TIMEOUT}}
 
   echo "Waiting for jobmanager pod ${jm_pod_name} ready."
-  kubectl wait --for=condition=Ready --timeout=${timeout}s pod/$jm_pod_name || exit 1
+  kubectl -n ${TEST_NAMESPACE} wait --for=condition=Ready --timeout=${timeout}s pod/$jm_pod_name || exit 1
 
   # wait or timeout until the log shows up
   echo "Waiting for log \"$2\"..."
@@ -54,28 +55,38 @@ function wait_for_logs {
   exit 1
 }
 
+kubectl create ns ${TEST_NAMESPACE}
 kubectl apply -f deploy/crd.yaml
+# K8s operator is running in default namespace
 kubectl apply -f deploy/flink-native-k8s-operator.yaml
-kubectl apply -f deploy/cr.yaml
+
+# Apply the rbac file in correct namespace
+sed "s/namespace: default/namespace: ${TEST_NAMESPACE}/" deploy/flink-rbac.yaml >deploy/flink-rbac.yaml.tmp
+kubectl -n ${TEST_NAMESPACE} apply -f deploy/flink-rbac.yaml.tmp
+rm -f deploy/flink-rbac.yaml.tmp
+
+kubectl -n ${TEST_NAMESPACE} apply -f deploy/cr.yaml
 
 for i in $(seq 1 $TIMEOUT);do
-  if kubectl get deploy/${CLUSTER_ID}; then
+  if kubectl -n ${TEST_NAMESPACE} get deploy/${CLUSTER_ID}; then
     break;
   fi
   sleep 1
 done
 
-kubectl wait --for=condition=Available --timeout=${TIMEOUT}s deploy/${CLUSTER_ID} || exit 1
-jm_pod_name=$(kubectl get pods --selector="app=${CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
+kubectl -n ${TEST_NAMESPACE} wait --for=condition=Available --timeout=${TIMEOUT}s deploy/${CLUSTER_ID} || exit 1
+jm_pod_name=$(kubectl -n ${TEST_NAMESPACE} get pods --selector="app=${CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
 
 wait_for_logs $jm_pod_name "Rest endpoint listening at"
 
 wait_for_logs $jm_pod_name "Completed checkpoint 1 for job"
 
-kubectl delete -f deploy/cr.yaml
-kubectl wait --for=delete --timeout=${TIMEOUT}s deploy/${CLUSTER_ID} || exit 1
+kubectl -n ${TEST_NAMESPACE} delete -f deploy/cr.yaml
+kubectl -n ${TEST_NAMESPACE} wait --for=delete --timeout=${TIMEOUT}s deploy/${CLUSTER_ID} || exit 1
+kubectl -n ${TEST_NAMESPACE} delete -f deploy/flink-rbac.yaml
 
 kubectl delete -f deploy/flink-native-k8s-operator.yaml
 kubectl delete -f deploy/crd.yaml
+kubectl delete ns ${TEST_NAMESPACE}
 
 echo "Successfully run the Flink Kubernetes application test"
