@@ -6,13 +6,14 @@ import org.apache.flink.kubernetes.operator.controller.FlinkApplicationControlle
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.fabric8.kubernetes.client.informers.SharedInformerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.Future;
 
 /** Main Class for Flink native k8s operator. */
 public class KubernetesOperatorEntrypoint {
@@ -30,24 +31,24 @@ public class KubernetesOperatorEntrypoint {
 
             final SharedInformerFactory informerFactory = kubeClient.informers();
 
-            final SharedIndexInformer<FlinkApplication> flinkAppinformer =
+            final SharedIndexInformer<FlinkApplication> flinkAppInformer =
                     informerFactory.sharedIndexInformerFor(FlinkApplication.class, 0);
-            MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>>
+            final MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>>
                     flinkAppK8sClient =
                             kubeClient.customResources(
                                     FlinkApplication.class, FlinkApplicationList.class);
 
-            FlinkApplicationController flinkApplicationController =
+            final FlinkApplicationController flinkApplicationController =
                     new FlinkApplicationController(
-                            kubeClient, flinkAppK8sClient, flinkAppinformer, namespace);
+                            kubeClient, flinkAppK8sClient, flinkAppInformer, namespace);
 
-            flinkApplicationController.create();
-            informerFactory.startAllRegisteredInformers();
             informerFactory.addSharedInformerEventListener(
                     exception -> LOG.error("Exception occurred, but caught", exception));
+            final Future<Void> startInformersFuture = informerFactory.startAllRegisteredInformers();
+            startInformersFuture.get();
 
             flinkApplicationController.run();
-        } catch (KubernetesClientException exception) {
+        } catch (Exception exception) {
             LOG.error("Kubernetes Client Exception : ", exception);
         }
     }
