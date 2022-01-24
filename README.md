@@ -28,11 +28,13 @@ docker push
  kubectl apply -f deploy/flink-native-k8s-operator.yaml
 ```
 * Apply the rbac for flink
+
 A new `ServiceAccount` "flink" will be created with enough permission to create/delete pods and ConfigMaps.
 ```
  kubectl apply -f deploy/flink-rbac.yaml
 ```
 * Create a new Flink application
+
 The flink-native-k8s-operator will watch the CRD resources and submit a new Flink application once the CR it applied.
 ```
 kubectl apply -f deploy/cr.yaml
@@ -77,6 +79,4 @@ Then you could use http://{app_name}.flink.k8s.io for the JobManager webUI.
 </div>
 
 ## Future to do
-* Support native K8s session mode.
-* ~~Support ingress for JobManager webUI~~
-* Support more fields updating, currently only `savepointGeneration` is supported.
+https://github.com/wangyang0918/flink-native-k8s-operator/issues/27
