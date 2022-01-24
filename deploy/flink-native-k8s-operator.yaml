@@ -14,24 +14,24 @@ spec:
     spec:
       serviceAccountName: flink-native-k8s-operator
       containers:
-      - name: flink-native-k8s-operator
-        image: wangyang09180523/flink-native-k8s-operator:1.1
-        imagePullPolicy: IfNotPresent
-        env:
-          - name: FLINK_CONF_DIR
-            value: /opt/flink/conf
-        volumeMounts:
-        - name: flink-config-volume
-          mountPath: /opt/flink/conf
+        - name: flink-native-k8s-operator
+          image: wangyang09180523/flink-native-k8s-operator:1.0.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: FLINK_CONF_DIR
+              value: /opt/flink/conf
+          volumeMounts:
+            - name: flink-config-volume
+              mountPath: /opt/flink/conf
       volumes:
-      - name: flink-config-volume
-        configMap:
-          name: flink-config
-          items:
-          - key: flink-conf.yaml
-            path: flink-conf.yaml
-          - key: log4j-console.properties
-            path: log4j-console.properties
+        - name: flink-config-volume
+          configMap:
+            name: flink-config
+            items:
+              - key: flink-conf.yaml
+                path: flink-conf.yaml
+              - key: log4j-console.properties
+                path: log4j-console.properties
 
 ---
 
@@ -110,50 +110,50 @@ kind: ClusterRole
 metadata:
   name: flink-native-k8s-operator
 rules:
-- apiGroups:
-  - flink-native-k8s-operator
-  resources:
-  - "*"
-  verbs:
-  - "*"
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - services
-  - endpoints
-  - persistentvolumeclaims
-  - events
-  - configmaps
-  - secrets
-  verbs:
-  - "*"
-- apiGroups:
-  - apps
-  resources:
-  - deployments
-  - replicasets
-  verbs:
-  - "*"
-- apiGroups:
-  - extensions
-  resources:
-  - deployments
-  - ingresses
-  verbs:
-  - "*"
-- apiGroups:
-  - flink.k8s.io
-  resources:
-  - flinkapplications
-  verbs:
-  - "*"
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses
-  verbs:
-  - "*"
+  - apiGroups:
+      - flink-native-k8s-operator
+    resources:
+      - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - endpoints
+      - persistentvolumeclaims
+      - events
+      - configmaps
+      - secrets
+    verbs:
+      - "*"
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - replicasets
+    verbs:
+      - "*"
+  - apiGroups:
+      - extensions
+    resources:
+      - deployments
+      - ingresses
+    verbs:
+      - "*"
+  - apiGroups:
+      - flink.k8s.io
+    resources:
+      - flinkapplications
+    verbs:
+      - "*"
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - "*"
 
 ---
 
@@ -162,9 +162,9 @@ kind: ClusterRoleBinding
 metadata:
   name: flink-native-k8s-operator-cluster-role-binding
 subjects:
-- kind: ServiceAccount
-  name: flink-native-k8s-operator
-  namespace: default
+  - kind: ServiceAccount
+    name: flink-native-k8s-operator
+    namespace: default
 roleRef:
   kind: ClusterRole
   name: flink-native-k8s-operator

@@ -4,7 +4,8 @@ metadata:
   name: flink-example-statemachine
 spec:
   imageName: apache/flink:1.14.2
-  jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
+  jarURI: local:///opt/flink/artifacts/myjob.jar
+  entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
   parallelism: 2
   jobManagerResource:
     mem: 1024m
@@ -17,3 +18,31 @@ spec:
   flinkConfig:
     taskmanager.numberOfTaskSlots: "2"
     kubernetes.jobmanager.service-account: flink
+  podTemplate:
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: jobmanager-pod-template
+    spec:
+      initContainers:
+        - name: artifacts-fetcher
+          image: busybox:latest
+          # Use wget or other tools to get user jars from remote storage
+          command: [ 'wget', 'https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.3/flink-examples-streaming_2.12-1.14.3.jar', '-O', '/flink-artifact/myjob.jar' ]
+          volumeMounts:
+            - mountPath: /flink-artifact
+              name: flink-artifact
+      containers:
+        # Do not change the main container name
+        - name: flink-main-container
+          resources:
+            requests:
+              ephemeral-storage: 2048Mi
+            limits:
+              ephemeral-storage: 2048Mi
+          volumeMounts:
+            - mountPath: /opt/flink/artifacts
+              name: flink-artifact
+      volumes:
+        - name: flink-artifact
+          emptyDir: { }

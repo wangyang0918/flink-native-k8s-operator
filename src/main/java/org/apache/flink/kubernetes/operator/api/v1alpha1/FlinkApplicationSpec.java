@@ -25,6 +25,8 @@ public class FlinkApplicationSpec {
 
     private Map<String, String> flinkConfig;
 
+    private Object podTemplate;
+
     public String getImageName() {
         return imageName;
     }
@@ -127,5 +129,13 @@ public class FlinkApplicationSpec {
 
     public void setSavepointGeneration(int savepointGeneration) {
         this.savepointGeneration = savepointGeneration;
+    }
+
+    public void setPodTemplate(Object podTemplate) {
+        this.podTemplate = podTemplate;
+    }
+
+    public Object getPodTemplate() {
+        return podTemplate;
     }
 }

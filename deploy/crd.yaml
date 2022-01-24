@@ -21,6 +21,8 @@ spec:
                   type: string
                 jarURI:
                   type: string
+                entryClass:
+                  type: string
                 parallelism:
                   type: integer
                 jobManagerResource:
@@ -45,6 +47,9 @@ spec:
                   type: object
                   additionalProperties:
                     type: string
+                podTemplate:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
   names:
     kind: FlinkApplication
     plural: flinkapplications

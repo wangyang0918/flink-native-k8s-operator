@@ -173,6 +173,7 @@ public class FlinkApplicationController {
             LOG.info("Effective configuration: {}", effectiveConfig);
         } catch (Exception e) {
             LOG.error("Failed to load configuration", e);
+
             return;
         }
 
