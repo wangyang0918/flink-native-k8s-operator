@@ -18,10 +18,23 @@ import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClie
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.util.StringUtils;
 
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.Map;
 
 public class FlinkUtils {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
+    private static final YAMLMapper yamlMapper = new YAMLMapper();
 
     public static Configuration getEffectiveConfig(
             String namespace, String clusterId, FlinkApplicationSpec spec) throws Exception {
@@ -92,6 +105,32 @@ public class FlinkUtils {
         // Dynamic configuration
         if (spec.getFlinkConfig() != null && !spec.getFlinkConfig().isEmpty()) {
             spec.getFlinkConfig().forEach(effectiveConfig::setString);
+        }
+
+        // Write pod template file to local
+        final Object podTemplate = spec.getPodTemplate();
+        if (podTemplate != null) {
+            if (podTemplate instanceof Map) {
+                try {
+                    final File podTemplateFile = File.createTempFile("pod-template", null);
+                    try (FileOutputStream output = new FileOutputStream(podTemplateFile)) {
+                        final String content =
+                                yamlMapper
+                                        .writerWithDefaultPrettyPrinter()
+                                        .writeValueAsString(podTemplate);
+                        output.write(content.getBytes(StandardCharsets.UTF_8));
+                        effectiveConfig.set(
+                                KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE,
+                                podTemplateFile.getAbsolutePath());
+                    } catch (Exception ex) {
+                        LOG.error("Failed to write pod template to file {}", podTemplateFile);
+                    }
+                } catch (IOException e) {
+                    LOG.error("Failed to create pod template file", e);
+                }
+            } else {
+                LOG.error("Failed to parse pod template");
+            }
         }
 
         return effectiveConfig;
