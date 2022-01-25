@@ -15,7 +15,7 @@ spec:
       serviceAccountName: flink-native-k8s-operator
       containers:
         - name: flink-native-k8s-operator
-          image: wangyang09180523/flink-native-k8s-operator:1.0.2
+          image: wangyang09180523/flink-native-k8s-operator:1.0.3
           imagePullPolicy: IfNotPresent
           env:
             - name: FLINK_CONF_DIR

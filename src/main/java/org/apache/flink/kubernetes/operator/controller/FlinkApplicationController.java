@@ -13,6 +13,7 @@ import org.apache.flink.kubernetes.operator.api.v1alpha1.FlinkApplication;
 import org.apache.flink.kubernetes.operator.api.v1alpha1.FlinkApplicationList;
 import org.apache.flink.kubernetes.operator.api.v1alpha1.FlinkApplicationStatus;
 import org.apache.flink.kubernetes.operator.api.v1alpha1.JobStatus;
+import org.apache.flink.kubernetes.operator.api.v1alpha1.Savepoint;
 import org.apache.flink.kubernetes.operator.utils.Constants;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.KubernetesUtils;
@@ -52,6 +53,8 @@ public class FlinkApplicationController {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkApplicationController.class);
     private static final int RECONCILE_INTERVAL_MS = 3000;
 
+    private static final String USER_CONTROL_ANNOTATION_KEY = "flinkapps.flink.k8s.io/user-control";
+
     private final KubernetesClient kubernetesClient;
     private final MixedOperation<FlinkApplication, FlinkApplicationList, Resource<FlinkApplication>>
             flinkAppK8sClient;
@@ -60,7 +63,7 @@ public class FlinkApplicationController {
 
     private final BlockingQueue<String> workqueue;
     private final Map<String, Tuple2<FlinkApplication, Configuration>> flinkApps;
-    private final Map<String, String> savepointLocation;
+    private final Map<String, Savepoint> savepoints;
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
@@ -80,7 +83,7 @@ public class FlinkApplicationController {
 
         this.workqueue = new ArrayBlockingQueue<>(1024);
         this.flinkApps = new ConcurrentHashMap<>();
-        this.savepointLocation = new HashMap<>();
+        this.savepoints = new HashMap<>();
 
         this.initInformerEventHandlers();
     }
@@ -125,9 +128,9 @@ public class FlinkApplicationController {
                 continue;
             }
             try {
-                LOG.info("Trying to get item from work queue");
+                LOG.debug("Trying to get item from work queue");
                 if (workqueue.isEmpty()) {
-                    LOG.info("Work queue is empty");
+                    LOG.debug("Work queue is empty");
                 }
                 String item = workqueue.take();
                 // Get the FlinkApplication resource's name from key which is in format
@@ -140,8 +143,14 @@ public class FlinkApplicationController {
                     LOG.error("FlinkApplication {} in work queue no longer exists", item);
                     continue;
                 }
-                LOG.info("Reconciling " + flinkApplication);
-                reconcile(flinkApplication);
+
+                final Tuple2<FlinkApplication, Configuration> oldFlinkApp =
+                        flinkApps.get(flinkApplication.getMetadata().getName());
+                if (FlinkUtils.needToReconcile(
+                        flinkApplication, oldFlinkApp == null ? null : oldFlinkApp.f0)) {
+                    LOG.info("Reconciling " + flinkApplication);
+                    reconcile(flinkApplication);
+                }
 
             } catch (InterruptedException interruptedException) {
                 Thread.currentThread().interrupt();
@@ -210,12 +219,20 @@ public class FlinkApplicationController {
                 return;
             }
 
-            FlinkApplication oldFlinkApp = flinkApps.get(clusterId).f0;
-
             // Trigger a new savepoint
-            triggerSavepoint(oldFlinkApp, flinkApp, effectiveConfig);
+            if ("savepoint"
+                    .equals(
+                            flinkApp.getMetadata()
+                                    .getAnnotations()
+                                    .get(USER_CONTROL_ANNOTATION_KEY))) {
+                LOG.info("Triggering savepoint for {}", clusterId);
+                triggerSavepoint(effectiveConfig);
+                flinkApp.getMetadata().getAnnotations().remove(USER_CONTROL_ANNOTATION_KEY);
+            }
 
             // TODO support more fields updating, e.g. image, resources
+
+            flinkApps.put(clusterId, new Tuple2<>(flinkApp, effectiveConfig));
         }
     }
 
@@ -271,43 +288,41 @@ public class FlinkApplicationController {
         kubernetesClient.resourceList(ingress).inNamespace(operatorNamespace).createOrReplace();
     }
 
-    private void triggerSavepoint(
-            FlinkApplication oldFlinkApp,
-            FlinkApplication newFlinkApp,
-            Configuration effectiveConfig) {
-        final int generation = newFlinkApp.getSpec().getSavepointGeneration();
-        if (generation > oldFlinkApp.getSpec().getSavepointGeneration()) {
-            try (ClusterClient<String> clusterClient =
-                    FlinkUtils.getRestClusterClient(effectiveConfig)) {
-                final CompletableFuture<Collection<JobStatusMessage>> jobDetailsFuture =
-                        clusterClient.listJobs();
-                jobDetailsFuture
-                        .get()
-                        .forEach(
-                                status -> {
-                                    LOG.debug(
-                                            "JobStatus for {}: {}",
-                                            clusterClient.getClusterId(),
-                                            status);
-                                    clusterClient
-                                            .triggerSavepoint(status.getJobId(), null)
-                                            .thenAccept(
-                                                    path ->
-                                                            savepointLocation.put(
-                                                                    status.getJobId().toString(),
-                                                                    path))
-                                            .join();
-                                });
-            } catch (Exception e) {
-                LOG.warn("Failed to trigger a new savepoint with generation {}", generation);
-            }
+    private void triggerSavepoint(Configuration effectiveConfig) {
+        try (ClusterClient<String> clusterClient =
+                FlinkUtils.getRestClusterClient(effectiveConfig)) {
+            final CompletableFuture<Collection<JobStatusMessage>> jobDetailsFuture =
+                    clusterClient.listJobs();
+            jobDetailsFuture
+                    .get()
+                    .forEach(
+                            status -> {
+                                LOG.debug(
+                                        "JobStatus for {}: {}",
+                                        clusterClient.getClusterId(),
+                                        status);
+                                clusterClient
+                                        .triggerSavepoint(status.getJobId(), null)
+                                        .thenAccept(
+                                                path ->
+                                                        savepoints.put(
+                                                                status.getJobId().toString(),
+                                                                new Savepoint(
+                                                                        String.valueOf(
+                                                                                System
+                                                                                        .currentTimeMillis()),
+                                                                        path)))
+                                        .join();
+                            });
+        } catch (Exception e) {
+            LOG.warn("Failed to trigger a new savepoint", e);
         }
     }
 
     private void addToWorkQueue(FlinkApplication flinkApplication) {
         String item = Cache.metaNamespaceKeyFunc(flinkApplication);
         if (item != null && !item.isEmpty()) {
-            LOG.info("Adding item {} to work queue", item);
+            LOG.debug("Adding item {} to work queue", item);
             workqueue.add(item);
         }
     }
@@ -327,10 +342,6 @@ public class FlinkApplicationController {
                                 .get()
                                 .forEach(
                                         status -> {
-                                            LOG.debug(
-                                                    "JobStatus for {}: {}",
-                                                    clusterClient.getClusterId(),
-                                                    status);
                                             final String jobId = status.getJobId().toString();
                                             final JobStatus jobStatus =
                                                     new JobStatus(
@@ -339,10 +350,13 @@ public class FlinkApplicationController {
                                                             status.getJobState().name(),
                                                             String.valueOf(
                                                                     System.currentTimeMillis()));
-                                            if (savepointLocation.containsKey(jobId)) {
-                                                jobStatus.setSavepointLocation(
-                                                        savepointLocation.get(jobId));
+                                            if (savepoints.containsKey(jobId)) {
+                                                jobStatus.setSavepoint(savepoints.get(jobId));
                                             }
+                                            LOG.debug(
+                                                    "JobStatus for {}: {}",
+                                                    clusterClient.getClusterId(),
+                                                    jobStatus);
                                             jobStatusList.add(jobStatus);
                                         });
                         flinkApp.f0.setStatus(
@@ -350,11 +364,10 @@ public class FlinkApplicationController {
                                         jobStatusList.toArray(new JobStatus[0])));
                         flinkAppK8sClient
                                 .inNamespace(flinkApp.f0.getMetadata().getNamespace())
-                                .createOrReplace(flinkApp.f0);
+                                .replace(flinkApp.f0);
                     } catch (Exception e) {
-                        flinkApp.f0.setStatus(new FlinkApplicationStatus());
                         LOG.warn(
-                                "Failed to list jobs for {}",
+                                "Failed to update status for {}",
                                 flinkApp.f0.getMetadata().getName(),
                                 e);
                     }

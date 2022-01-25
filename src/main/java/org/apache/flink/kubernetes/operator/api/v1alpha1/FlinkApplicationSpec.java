@@ -18,11 +18,6 @@ public class FlinkApplicationSpec {
     private Resource jobManagerResource;
     private Resource taskManagerResource;
 
-    private String fromSavepoint;
-    private boolean allowNonRestoredState = false;
-    private String savepointsDir;
-    private int savepointGeneration;
-
     private Map<String, String> flinkConfig;
 
     private Object podTemplate;
@@ -97,38 +92,6 @@ public class FlinkApplicationSpec {
 
     public void setFlinkConfig(Map<String, String> flinkConfig) {
         this.flinkConfig = flinkConfig;
-    }
-
-    public String getFromSavepoint() {
-        return fromSavepoint;
-    }
-
-    public void setFromSavepoint(String fromSavepoint) {
-        this.fromSavepoint = fromSavepoint;
-    }
-
-    public boolean isAllowNonRestoredState() {
-        return allowNonRestoredState;
-    }
-
-    public void setAllowNonRestoredState(boolean allowNonRestoredState) {
-        this.allowNonRestoredState = allowNonRestoredState;
-    }
-
-    public String getSavepointsDir() {
-        return savepointsDir;
-    }
-
-    public void setSavepointsDir(String savepointsDir) {
-        this.savepointsDir = savepointsDir;
-    }
-
-    public int getSavepointGeneration() {
-        return savepointGeneration;
-    }
-
-    public void setSavepointGeneration(int savepointGeneration) {
-        this.savepointGeneration = savepointGeneration;
     }
 
     public void setPodTemplate(Object podTemplate) {
