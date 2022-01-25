@@ -14,42 +14,33 @@ have better performance to launch multiple applications.
 ```
 
 ## How to Run
-* Make Sure that FlinkApplication Custom Resource Definition is already applied onto the cluster. The CRD could be find [here](deploy/crd.yaml). If not, issue the following commands to apply:
+1. Make Sure that FlinkApplication Custom Resource Definition is already applied onto the cluster. The CRD could be find [here](deploy/crd.yaml). If not, issue the following commands to apply:
  ```
  kubectl apply -f deploy/crd.yaml
  ```
-* Build Docker Image
+2. Build Docker Image
 ```
-docker build . -t flink-native-k8s-operator:1.0
+docker build . -t flink-native-k8s-operator:1.0.x
 docker push
 ```
-* Start flink-native-k8s-operator deployment
+3. Start flink-native-k8s-operator deployment
 ```
  kubectl apply -f deploy/flink-native-k8s-operator.yaml
 ```
-* Apply the rbac for flink
+4. Apply the RBAC for flink
 
 A new `ServiceAccount` "flink" will be created with enough permission to create/delete pods and ConfigMaps.
 ```
  kubectl apply -f deploy/flink-rbac.yaml
 ```
-* Create a new Flink application
+5. Create a new Flink application
 
-The flink-native-k8s-operator will watch the CRD resources and submit a new Flink application once the CR it applied.
+The flink-native-k8s-operator will watch the CRD resources and submit a new Flink application once the CR is applied.
 ```
 kubectl apply -f deploy/cr.yaml
 ```
 
-* Delete a Flink application
-```
-kubectl delete -f deploy/cr.yaml
-
-OR
-
-kubectl delete flinkapp {app_name}
-```
-
-* Get/List Flink applications
+6. Get/List Flink applications
 Get all the Flink applications running in the K8s cluster
 ```
 kubectl get flinkapp
@@ -60,16 +51,20 @@ Describe a specific Flink application to show the status(including job status, s
 kubectl describe flinkapp {app_name}
 ```
 
-Trigger a new savepoint
+7. Delete a Flink application
 ```
-kubectl edit flinkapp {app_name}
-# Edit the spec of flinkapp and increase the value of `savepointGeneration`.
+kubectl delete -f deploy/cr.yaml
+
+OR
+
+kubectl delete flinkapp {app_name}
 ```
 
 ## How to access JobManager UI
 By default, we expose the JobManager rest port with `ClusterIP`, which means it could only be accessed in the cluster. In 
-order to access the webUI outside of the K8s cluster, the operator will try to create a ingress entry for each application.
+order to access the webUI outside of the K8s cluster, the operator will try to create an ingress entry for each application.
 Then you could use http://{app_name}.flink.k8s.io for the JobManager webUI.
+
 <div class="alert alert-info" markdown="span">
   All the Flink app share a same ingress with different rules. This will save a lot public LoadBalancer ip requirements.
 
@@ -78,5 +73,5 @@ Then you could use http://{app_name}.flink.k8s.io for the JobManager webUI.
   `kubectl get ingress flink-native-k8s-operator` could be used to get the ingress ip address.
 </div>
 
-## Future to do
+## Features
 https://github.com/wangyang0918/flink-native-k8s-operator/issues/27
