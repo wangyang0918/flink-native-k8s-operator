@@ -25,7 +25,7 @@ jobs:
         run: |
           export SHELL=/bin/bash
           eval $(minikube -p minikube docker-env)
-          docker build -f ./Dockerfile -t wangyang09180523/flink-native-k8s-operator:1.0.2 .
+          docker build -f ./Dockerfile -t wangyang09180523/flink-native-k8s-operator:1.0.3 .
           echo -n "verifying images:"
           docker images
       - name: Run the e2e test

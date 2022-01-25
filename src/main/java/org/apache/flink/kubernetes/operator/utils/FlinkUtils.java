@@ -2,7 +2,6 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.rest.RestClusterClient;
-import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
@@ -13,9 +12,10 @@ import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.operator.api.v1alpha1.FlinkApplication;
 import org.apache.flink.kubernetes.operator.api.v1alpha1.FlinkApplicationSpec;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
@@ -89,19 +89,6 @@ public class FlinkUtils {
                     spec.getTaskManagerResource().getCpu());
         }
 
-        // Savepoint
-        if (!StringUtils.isNullOrWhitespaceOnly(spec.getFromSavepoint())) {
-            effectiveConfig.setString(
-                    SavepointConfigOptions.SAVEPOINT_PATH, spec.getFromSavepoint());
-            effectiveConfig.set(
-                    SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE,
-                    spec.isAllowNonRestoredState());
-        }
-        if (!StringUtils.isNullOrWhitespaceOnly(spec.getSavepointsDir())) {
-            effectiveConfig.setString(
-                    CheckpointingOptions.SAVEPOINT_DIRECTORY, spec.getSavepointsDir());
-        }
-
         // Dynamic configuration
         if (spec.getFlinkConfig() != null && !spec.getFlinkConfig().isEmpty()) {
             spec.getFlinkConfig().forEach(effectiveConfig::setString);
@@ -148,5 +135,26 @@ public class FlinkUtils {
                 clusterId,
                 (effectiveConfiguration, fatalErrorHandler) ->
                         new StandaloneClientHAServices(restServerAddress));
+    }
+
+    public static boolean needToReconcile(FlinkApplication flinkApp, FlinkApplication oldFlinkApp) {
+        Preconditions.checkNotNull(flinkApp);
+        if (oldFlinkApp == null) {
+            return true;
+        }
+
+        return !(mapEquals(
+                        flinkApp.getMetadata().getAnnotations(),
+                        oldFlinkApp.getMetadata().getAnnotations())
+                && mapEquals(
+                        flinkApp.getMetadata().getLabels(), oldFlinkApp.getMetadata().getLabels())
+                && flinkApp.getSpec().toString().equals(oldFlinkApp.getSpec().toString()));
+    }
+
+    private static boolean mapEquals(Map<String, String> map1, Map<String, String> map2) {
+        if (map1 != null) {
+            return map1.equals(map2);
+        }
+        return map2 == null;
     }
 }

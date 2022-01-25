@@ -8,7 +8,7 @@ public class JobStatus {
     private String jobId;
     private String state;
     private String updateTime;
-    private String savepointLocation;
+    private Savepoint savepoint;
 
     public JobStatus() {}
 
@@ -51,11 +51,11 @@ public class JobStatus {
         this.updateTime = updateTime;
     }
 
-    public String getSavepointLocation() {
-        return savepointLocation;
+    public void setSavepoint(Savepoint savepoint) {
+        this.savepoint = savepoint;
     }
 
-    public void setSavepointLocation(String savepointLocation) {
-        this.savepointLocation = savepointLocation;
+    public Savepoint getSavepoint() {
+        return savepoint;
     }
 }

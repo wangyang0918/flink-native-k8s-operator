@@ -13,8 +13,6 @@ spec:
   taskManagerResource:
     mem: 1024m
     cpu: 0.5
-  savepointsDir: file:///tmp/savepoints
-  savepointGeneration: 0
   flinkConfig:
     taskmanager.numberOfTaskSlots: "2"
     kubernetes.service-account: flink

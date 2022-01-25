@@ -65,7 +65,7 @@ rm -f deploy/flink-rbac.yaml.tmp
 kubectl -n ${TEST_NAMESPACE} apply -f deploy/cr.yaml
 
 for i in $(seq 1 $TIMEOUT);do
-  if kubectl -n ${TEST_NAMESPACE} get deploy/${CLUSTER_ID}; then
+  if kubectl -n ${TEST_NAMESPACE} get deploy/${CLUSTER_ID} >/dev/null 2>&1; then
     break;
   fi
   sleep 1
@@ -90,6 +90,18 @@ kubectl -n ${TEST_NAMESPACE} exec $jm_pod_name -- /bin/sh -c "kill 1" || cleanup
 # Check the new JobManager recovering from latest successful checkpoint
 wait_for_logs $jm_pod_name "Restoring job $job_id from Checkpoint"
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job"
+
+echo "Triggering and waiting for the savepoint"
+kubectl -n ${TEST_NAMESPACE} annotate flinkapp ${CLUSTER_ID} flinkapps.flink.k8s.io/user-control=savepoint
+for i in $(seq 1 $TIMEOUT);do
+  savepoint=$(kubectl -n ${TEST_NAMESPACE} get flinkapp ${CLUSTER_ID} -o jsonpath='{..status.jobStatuses[0].savepoint}' | grep "/opt/flink/volume/flink-sp")
+  if [ -n "${savepoint}" ]; then
+    echo ${savepoint}
+    break;
+  fi
+  sleep 1
+done
+[ -z "${savepoint}" ] && cleanup_and_exit 1
 
 echo "Successfully run the Flink Kubernetes application test"
 
