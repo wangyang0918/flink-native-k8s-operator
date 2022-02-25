@@ -1,3 +1,5 @@
+*NOTE: This project is deprecated. Please refer to the community official repo https://github.com/apache/flink-kubernetes-operator*
+
 # Flink native K8s operator in Java
 
 ![Flink native K8s operator](doc/Flink-native-K8s-operator.jpg)
