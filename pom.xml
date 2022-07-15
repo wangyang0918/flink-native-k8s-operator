@@ -14,7 +14,7 @@
         <maven-assembly-plugin.version>3.3.0</maven-assembly-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
 
-        <kubernetes.client.version>5.5.0</kubernetes.client.version>
+        <kubernetes.client.version>5.7.4</kubernetes.client.version>
 
         <lombok.version>1.18.10</lombok.version>
 
